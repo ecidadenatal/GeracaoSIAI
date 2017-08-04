@@ -213,6 +213,14 @@ $unidades[$oLinhaInstit->orgao.".".$oLinhaInstit->unidade] = $oLinhaInstit->orga
             </tr>
             <tr>
               <td class="alinha-td-check">
+                <input type="checkbox" id='depesapessoalfundeb' value='Despesa com Pessoal do Fundeb' name="DespesaPessoalFundeb" />
+              </td>
+              <td class="alinha-td-label">
+                <label for="DespesaPessoalFundeb">Anexo 27 - Despesa com Pessoal do Fundeb</label>
+              </td>
+            </tr>
+            <tr>
+              <td class="alinha-td-check">
                 <input type="checkbox" id='veiculos' value='Veículos' name="Veiculos" />
               </td>
               <td class="alinha-td-label">
