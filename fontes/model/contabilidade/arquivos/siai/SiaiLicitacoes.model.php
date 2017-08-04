@@ -25,9 +25,9 @@
  *                                licenca/licenca_pt.txt 
  */
 
-require_once("interfaces/iPadArquivoTxtBase.interface.php");
-require_once ("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php");
-require_once ("libs/db_liborcamento.php");
+require_once(modification("interfaces/iPadArquivoTxtBase.interface.php"));
+require_once(modification("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php"));
+require_once(modification("libs/db_liborcamento.php"));
 
 class SiaiLicitacoes extends SiaiArquivoBase implements iPadArquivoTXTBase {
   

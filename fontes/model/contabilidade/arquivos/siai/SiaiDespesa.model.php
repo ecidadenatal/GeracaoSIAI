@@ -25,9 +25,9 @@
  * Copia da licenca no diretorio licenca/licenca_en.txt
  * licenca/licenca_pt.txt
  */
-require_once ("interfaces/iPadArquivoTxtBase.interface.php");
-require_once ("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php");
-require_once ("libs/db_liborcamento.php");
+require_once(modification("interfaces/iPadArquivoTxtBase.interface.php"));
+require_once(modification("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php"));
+require_once(modification("libs/db_liborcamento.php"));
 class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 	protected $iCodigoLayout = 2000001;
 	
@@ -108,20 +108,27 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 			                     or (o58_orgao = 20 and o58_unidade = 49))";
 		}
 
+		if ($this->codigoOrgao == "34" && $this->codigoUnidade == "1") {
+			$sWhereOrgaoUnidade = "((o58_orgao = 34 and o58_unidade = 1) 
+			                     or (o58_orgao = 34 and o58_unidade = 49))";
+		}
+
 		if ($this->codigoOrgao == "18" && $this->codigoUnidade == "1") {
 			$sWhereOrgaoUnidade = "((o58_orgao = 18 and o58_unidade = 45) 
 			                     or (o58_orgao = 18 and o58_unidade = 46) 
 			                     or (o58_orgao = 18 and o58_unidade = 47) 
 			                     or (o58_orgao = 18 and o58_unidade = 48) 
+			                     or (o58_orgao = 18 and o58_unidade = 49) 
 			                     or (o58_orgao = 18 and o58_unidade = 1))";
 		}
 
 		
 		db_query ( "begin" );
 		$rsDotacaoSaldo = db_dotacaosaldo ( 8, 1, 4, true, $sWhereOrgaoUnidade, $this->iAnoUso, $this->dtDataInicial, $this->dtDataFinal);
-                db_query ( "rollback" );
+		//db_criatabela($rsDotacaoSaldo);
+		db_query ( "rollback" );
 
-                $nValorDotacaoInicial = 0;
+        $nValorDotacaoInicial = 0;
         
 		$aDadosDespesas = array();
 		$iLinhasDotacaoSaldo = pg_num_rows ( $rsDotacaoSaldo );
@@ -142,6 +149,23 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 					continue;
 				}
 				
+				/*
+				 * Se for em 2017, pega a fonte da tabela de-para
+				 */
+				
+				if($this->iAnoUso == 2017) {
+					$sSqlDeParaFonte = "SELECT fonte_tce FROM plugins.deparafontetce WHERE orgao = $oDespesa->o58_orgao
+                                                                         			   AND unidade = $oDespesa->o58_unidade
+                                                                         			   AND fonte_orcamento = $oDespesa->o58_codigo
+                                                                         			   AND exercicio = {$this->iAnoUso}";
+
+					$fonte_tce = db_utils::fieldsMemory(db_query($sSqlDeParaFonte), 0)->fonte_tce;
+					$oDespesa->o58_codigo = $fonte_tce;
+					if (empty($fonte_tce)) {
+						continue;
+					}
+				}
+
 				$sIdPrograma = $oDespesa->o58_programa;
 				if ($sHashPrograma != $sIdPrograma) {
 					
@@ -166,6 +190,20 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 				}
 				$sHashPrograma = $sIdPrograma;
 				
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "33913900" ? "333903900" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "33913999" ? "333903900" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "33303900" ? "333903900" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "31919700" ? "331919900" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "33313900" ? "333903900" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "33503900" ? "333903900" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "33603900" ? "333903900" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "44104100" ? "344204100" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "44505100" ? "344805100" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "31903400" ? "331900400" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "31904600" ? "331901600" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "44209900" ? "344903500" : $oDespesa->o58_elemento;
+				$oDespesa->o58_elemento = substr($oDespesa->o58_elemento, 1, 8) == "99999900" ? "399999901" : $oDespesa->o58_elemento;
+
 				/* 
 				 * Montamos o Objeto de Vetor com os dados das dotacoes
 				 */ 
@@ -225,6 +263,23 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 				  					  and o58_projativ = ".$oDespesa->o58_projativ."
 				  					  and ((o58_orgao = 20 and o58_unidade = 1) 
 			                            or (o58_orgao = 20 and o58_unidade = 49))";
+			    }		
+
+				if ($this->codigoOrgao == "34" && $this->codigoUnidade == "1") {
+			      $sSqlValorRPNP = "select round((e91_vlremp - e91_vlranu - e91_vlrliq),2) as rp_nao_processado
+			                        from empresto
+			                             inner join empempenho on e60_numemp = e91_numemp
+				  	                     inner join orcdotacao on o58_coddot = e60_coddot and o58_anousu = e60_anousu
+				  	                     inner join orcelemento on o56_codele = o58_codele and o56_anousu = o58_anousu
+                                    where e91_anousu = " . db_getsession ( "DB_anousu" ) . "
+				  					  and o56_elemento = '".$oDespesa->o58_elemento."'
+				  					  and o58_codigo = ".$oDespesa->o58_codigo."
+				  					  and o58_funcao = ".$oDespesa->o58_funcao."
+				  					  and o58_subfuncao = ".$oDespesa->o58_subfuncao."
+				  					  and o58_programa = ".$oDespesa->o58_programa."
+				  					  and o58_projativ = ".$oDespesa->o58_projativ."
+				  					  and ((o58_orgao = 34 and o58_unidade = 1) 
+			                            or (o58_orgao = 34 and o58_unidade = 49))";
 			    }	
 
 			    if ($this->codigoOrgao == "18" && $this->codigoUnidade == "1") {
@@ -243,8 +298,26 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 				  					  and ((o58_orgao = 18 and o58_unidade = 45) 
 				                     	or (o58_orgao = 18 and o58_unidade = 46) 
 				                     	or (o58_orgao = 18 and o58_unidade = 47) 
-				                     	or (o58_orgao = 18 and o58_unidade = 48) 
+				                     	or (o58_orgao = 18 and o58_unidade = 48)  
+				                     	or (o58_orgao = 18 and o58_unidade = 49) 
 				                     	or (o58_orgao = 18 and o58_unidade = 1))";
+			    }
+
+			    if ($this->codigoOrgao == "34" && $this->codigoUnidade == "1") {
+			      $sSqlValorRPNP = "select round((e91_vlremp - e91_vlranu - e91_vlrliq),2) as rp_nao_processado
+			                        from empresto
+			                             inner join empempenho on e60_numemp = e91_numemp
+				  	                     inner join orcdotacao on o58_coddot = e60_coddot and o58_anousu = e60_anousu
+				  	                     inner join orcelemento on o56_codele = o58_codele and o56_anousu = o58_anousu
+                                    where e91_anousu = " . db_getsession ( "DB_anousu" ) . "
+				  					  and o56_elemento = '".$oDespesa->o58_elemento."'
+				  					  and o58_codigo = ".$oDespesa->o58_codigo."
+				  					  and o58_funcao = ".$oDespesa->o58_funcao."
+				  					  and o58_subfuncao = ".$oDespesa->o58_subfuncao."
+				  					  and o58_programa = ".$oDespesa->o58_programa."
+				  					  and o58_projativ = ".$oDespesa->o58_projativ."
+				  					  and ((o58_orgao = 34 and o58_unidade = 1) 
+				                     	or (o58_orgao = 34 and o58_unidade = 49))";
 			    }
 				$rsValorRPNP = db_query ( $sSqlValorRPNP );
 				if (pg_num_rows ( $rsValorRPNP ) > 0) {
@@ -265,7 +338,12 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 					
 				  $aDadosDespesas[$iIdDespesa]["codigodespesa"]      = str_pad ( substr ( $oDespesa->o58_elemento, 1, 8 ), 8, "0", STR_PAD_LEFT );
 				  $aDadosDespesas[$iIdDespesa]["fonterecurso"]       = str_pad ( substr ( $oDespesa->o58_codigo, 0, 10 ), 10, "0", STR_PAD_LEFT );
-				  $aDadosDespesas[$iIdDespesa]["classinstitucional"] = str_pad ( $oDespesa->o58_orgao, 2, "0", STR_PAD_LEFT ) . str_pad ( $oDespesa->o58_unidade, 2, "0", STR_PAD_LEFT );
+				  $aDadosDespesas[$iIdDespesa]["classinstitucional"] = str_pad ( $oDespesa->o58_orgao, 2, "0", STR_PAD_LEFT );
+				  if ($oDespesa->o58_orgao == "24" && $oDespesa->o58_unidade == "20") {
+		            $aDadosDespesas[$iIdDespesa]["classinstitucional"] .= "220";
+		          } else {
+		            $aDadosDespesas[$iIdDespesa]["classinstitucional"] .= str_pad ( $oDespesa->o58_unidade, 2, "0", STR_PAD_LEFT );
+		          }
 				  $aDadosDespesas[$iIdDespesa]["classfuncional"]     = str_pad ( substr ( str_pad ( $oDespesa->o58_funcao, 2, 0, STR_PAD_LEFT ) . str_pad ( $oDespesa->o58_subfuncao, 3, 0, STR_PAD_LEFT ), 0, 5 ), 5, "0", STR_PAD_LEFT );
 				  $aDadosDespesas[$iIdDespesa]["classprograma"]      = str_pad ( substr ( $oDespesa->o58_programa, 0, 4 ), 4, "0", STR_PAD_LEFT );
 				  $aDadosDespesas[$iIdDespesa]["classprojeto"]       = str_pad ( substr ( $oDespesa->o58_projativ, 0, 4 ), 4, "0", STR_PAD_LEFT );
@@ -295,7 +373,7 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 				/*
 				 * Apenas serão mostradas as despesas ligadas a dotação
 				 */
-				if ($oDespesa->o58_codigo == 0) {
+				if ($oDespesa->o58_codigo == 0){// || $oDespesa->o58_instit != db_getsession("DB_instit")) {
 					continue;
 				}
 				$sIdProgramaProjetoAtividade = "$oDespesa->o58_programa|$oDespesa->o58_projativ";
@@ -334,10 +412,15 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 				/*
 				 * Apenas serÃ£o mostradas as despesas ligadas a dotaÃ§Ã£o
 				 */
-				if ($oDespesa->o58_codigo == 0) {
+				if ($oDespesa->o58_codigo == 0) {// || $oDespesa->o58_instit != db_getsession("DB_instit")) {
 					continue;
 				}
-				$iIdUnidade = str_pad ( $oDespesa->o58_orgao, 2, "0", STR_PAD_LEFT ) . str_pad ( $oDespesa->o58_unidade, 2, "0", STR_PAD_LEFT );
+				$iIdUnidade = str_pad ( $oDespesa->o58_orgao, 2, "0", STR_PAD_LEFT );
+				if ($oDespesa->o58_orgao == "24" && $oDespesa->o58_unidade == "20") {
+		          $iIdUnidade .= "220";
+		        } else {
+		          $iIdUnidade .= str_pad ( $oDespesa->o58_unidade, 2, "0", STR_PAD_LEFT );
+		        }
 				if ($sHashUnidade != $iIdUnidade) {
 					
 					$iNumLinha++;
@@ -370,11 +453,18 @@ class SiaiDespesa extends SiaiArquivoBase implements iPadArquivoTXTBase {
 			
 				$oDespesa = (object) $aDespesa;
 
-				$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "31919700" ? "31909700" : $oDespesa->codigodespesa;
-				$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33313900" ? "33903900" : $oDespesa->codigodespesa;
-				$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33503900" ? "33903900" : $oDespesa->codigodespesa;
-				$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33603900" ? "33903900" : $oDespesa->codigodespesa;
-				$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "44104100" ? "44204100" : $oDespesa->codigodespesa;
+				//$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33913900" ? "33903900" : $oDespesa->codigodespesa;
+				//$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33303900" ? "33903900" : $oDespesa->codigodespesa;
+				//$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "31919700" ? "31919900" : $oDespesa->codigodespesa;
+				//$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33313900" ? "33903900" : $oDespesa->codigodespesa;
+				//$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33503900" ? "33903900" : $oDespesa->codigodespesa;
+				//$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "33603900" ? "33903900" : $oDespesa->codigodespesa;
+				//$oDespesa->codigodespesa = substr($oDespesa->codigodespesa, 0, 8) == "44104100" ? "44204100" : $oDespesa->codigodespesa;
+
+
+				/*if($oDespesa->codigodespesa == "99999900"){// || $oDespesa->o58_instit != db_getsession("DB_instit")) {
+					continue;
+				}*/
 
 				$iNumLinha++;
 				$oDadosDetalhe4 = new stdClass ();

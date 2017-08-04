@@ -25,7 +25,7 @@
  *                                licenca/licenca_pt.txt 
  */
 
-require_once ("interfaces/iPadArquivoTxtBase.interface.php");
+require_once(modification("interfaces/iPadArquivoTxtBase.interface.php"));
 
 /**
  * 

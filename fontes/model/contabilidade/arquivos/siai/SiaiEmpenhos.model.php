@@ -24,10 +24,10 @@
  *  Copia da licenca no diretorio licenca/licenca_en.txt 
  *                                licenca/licenca_pt.txt 
  */
-require_once("interfaces/iPadArquivoTxtBase.interface.php");
-require_once ("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php");
-require_once ("libs/db_liborcamento.php");
-require_once ("std/DBString.php");
+require_once(modification("interfaces/iPadArquivoTxtBase.interface.php"));
+require_once(modification("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php"));
+require_once(modification("libs/db_liborcamento.php"));
+require_once(modification("std/DBString.php"));
 
 class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
   
@@ -49,13 +49,20 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
     
     $lDebug = true;
     if ($lDebug) {
-    	$arqFinal = fopen ( "tmp/{$sNomeArquivo}.txt", 'w+' );
+      $arqFinal = fopen ( "tmp/{$sNomeArquivo}.txt", 'w+' );
     }
 
     
     $sCodDotWhere = "in (select o58_coddot from orcdotacao 
-                                                      where (o58_orgao = {$this->codigoOrgao} and o58_unidade = {$this->codigoUnidade}) and o58_anousu = $iAnoSessao)";
-    $sOrcDotacaoWhere = "and (o58_orgao = {$this->codigoOrgao} and o58_unidade = {$this->codigoUnidade})";
+                                           where ((o58_orgao = {$this->codigoOrgao} 
+                                                    and o58_unidade = {$this->codigoUnidade}) 
+                                                  or ({$this->codigoOrgao} = 0 
+                                                    and o58_instit = {$this->codigoUnidade})) 
+                    and o58_anousu = $iAnoSessao)";
+    $sOrcDotacaoWhere = "and ((o58_orgao = {$this->codigoOrgao} 
+                                  and o58_unidade = {$this->codigoUnidade}) 
+                              or ({$this->codigoOrgao} = 0 
+                                  and o58_instit = {$this->codigoUnidade}))";
     
     if ($this->codigoOrgao == "29" && $this->codigoUnidade == "1") {
       $sCodDotWhere = "in (select o58_coddot from orcdotacao 
@@ -75,18 +82,28 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
                              or (o58_orgao = 20 and o58_unidade = 49))";  
     }
 
+    if ($this->codigoOrgao == "34" && $this->codigoUnidade == "1") {
+      $sCodDotWhere = "in (select o58_coddot from orcdotacao 
+                                                      where ((o58_orgao = 34 and o58_unidade = 1) 
+                                                          or (o58_orgao = 34 and o58_unidade = 49)) and o58_anousu = $iAnoSessao)";
+      $sOrcDotacaoWhere = "and ((o58_orgao = 34 and o58_unidade = 1) 
+                             or (o58_orgao = 34 and o58_unidade = 49))";  
+    }
+
     if ($this->codigoOrgao == "18" && $this->codigoUnidade == "1") {
       $sCodDotWhere = "in (select o58_coddot from orcdotacao 
                                                       where ((o58_orgao = 18 and o58_unidade = 1) 
                                                           or (o58_orgao = 18 and o58_unidade = 45) 
                                                           or (o58_orgao = 18 and o58_unidade = 46) 
                                                           or (o58_orgao = 18 and o58_unidade = 47) 
-                                                          or (o58_orgao = 18 and o58_unidade = 48)) and o58_anousu = $iAnoSessao)";
+                                                          or (o58_orgao = 18 and o58_unidade = 48)
+                                                          or (o58_orgao = 18 and o58_unidade = 49)) and o58_anousu = $iAnoSessao)";
       $sOrcDotacaoWhere = "and ((o58_orgao = 18 and o58_unidade = 1) 
                              or (o58_orgao = 18 and o58_unidade = 45) 
                              or (o58_orgao = 18 and o58_unidade = 46) 
                              or (o58_orgao = 18 and o58_unidade = 47) 
-                             or (o58_orgao = 18 and o58_unidade = 48))";  
+                             or (o58_orgao = 18 and o58_unidade = 48) 
+                             or (o58_orgao = 18 and o58_unidade = 49))";  
     }
     
     $sCampos  = " orcdotacao.o58_orgao,                          ";
@@ -95,7 +112,14 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
     $sCampos .= " empempenho.e60_anousu,                         ";
     $sCampos .= " coalesce(empempenho.e60_resumo, 'Justificativa não informada') as e60_resumo, ";
     $sCampos .= " orcdotacao.o58_projativ,                       ";
-    $sCampos .= " orcdotacao.o58_codigo,                         ";
+    $sCampos .= " (CASE
+                    WHEN orcdotacao.o58_anousu < 2017 THEN CAST(orcdotacao.o58_codigo AS VARCHAR(10))
+                    ELSE (SELECT fonte_tce FROM plugins.deparafontetce WHERE orgao = orcdotacao.o58_orgao
+                                                                         AND unidade = orcdotacao.o58_unidade
+                                                                         AND fonte_orcamento = orcdotacao.o58_codigo
+                                                                         AND exercicio = orcdotacao.o58_anousu
+                                                                         AND instit = orcdotacao.o58_instit)
+                  END) o58_codigo,                         ";
     $sCampos .= " orcelemento.o56_elemento,                      ";
     $sCampos .= " empempenho.e60_vlremp,                         ";
     $sCampos .= " CASE                                           "; 
@@ -120,14 +144,21 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
                                 on e150_empautoriza = e61_autori
                     where e61_numemp = e60_numemp limit 1) as processo_despesa,";
     $sCampos .= "(select numerorecibolicitacao 
-    		        from plugins.empempenhoprocessolicitatorio 
-    		       where empempenho = e60_numemp ) as numeroprocessolicitatorio,";
-    $sCampos .= "(select T1.cpf from (select max(plugins.documentoassinaturaordenadordespesa.sequencial), cpf 
+                from plugins.empempenhoprocessolicitatorio 
+               where empempenho = e60_numemp ) as numeroprocessolicitatorio,";
+    $sCampos .= "(select l44_codigotribunal 
+                  from empautoriza
+                    inner join pctipocompra on pc50_codcom = e54_codcom
+                    inner join pctipocompratribunal on l44_sequencial = pc50_pctipocompratribunal
+                    inner join empempaut on e61_autori = e54_autori
+                  where e61_numemp = e60_numemp) as codigolicitacaotribunal,";
+    $sCampos .= "(select T1.cpf from (select max(plugins.documentoassinaturaordenadordespesa.sequencial), z01_cgccpf as cpf 
                     from plugins.documentoassinaturaordenadordespesa 
                          inner join plugins.assinaturaordenadordespesa on assinaturaordenadordespesa.sequencial = documentoassinaturaordenadordespesa.assinaturaordenadordespesa
+                         inner join cgm on z01_numcgm = plugins.assinaturaordenadordespesa.numcgm
                    where documentoassinaturaordenadordespesa.chave = e60_numemp 
                      and documentoassinaturaordenadordespesa.tipo = 1
-                   group by chave, cpf) T1) as numerodocumentoordenador";
+                   group by chave, z01_cgccpf) T1) as numerodocumentoordenador";
     $sWhereBuscaEmpenhos  = "empempenho.e60_anousu = {$iAnoSessao}                                                 ";
     $sWhereBuscaEmpenhos .= " and empempenho.e60_emiss between '{$this->dtDataInicial}' and '{$this->dtDataFinal}' ";
     $sWhereBuscaEmpenhos .= " and empempenho.e60_instit = {$iInstituicaoSessao}                                    ";
@@ -176,7 +207,7 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
     }
     
     if($iLinhasEmpenhos > 0) {
-    	
+      
         /*
          * DETALHE 1
          * EMPENHOS
@@ -201,18 +232,23 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
             
             $aEmpImportados[] = $oDados->e60_codemp;
 
-            $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "31919700" ? "331909700" : $oDados->o56_elemento;
+            $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "33913900" ? "333903900" : $oDados->o56_elemento;
+            $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "33913999" ? "333903900" : $oDados->o56_elemento;
+            $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "33303900" ? "333903900" : $oDados->o56_elemento;
+            $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "31919700" ? "331919900" : $oDados->o56_elemento;
             $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "33313900" ? "333903900" : $oDados->o56_elemento;
             $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "33503900" ? "333903900" : $oDados->o56_elemento;
             $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "33603900" ? "333903900" : $oDados->o56_elemento;
+            $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "44104100" ? "344204100" : $oDados->o56_elemento;
+            $oDados->o56_elemento = substr($oDados->o56_elemento, 1, 8) == "44505100" ? "344805100" : $oDados->o56_elemento;
 
             $oDadosDetalhe1 = new stdClass();
             $oDadosDetalhe1->TipoRegistro                  = "1";
             $oDadosDetalhe1->BimReferencia                 = $this->sBimReferencia;
             $oDadosDetalhe1->ProcessoDespesa               = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
-            $oDadosDetalhe1->CodigoProcedimentoDespesa     = str_pad("", 4  , "0");
-            $oDadosDetalhe1->NumeroReciboProcessoLicitacao = str_pad($oDados->numeroprocessolicitatorio, 10 , "0", STR_PAD_LEFT); 
-            $oDadosDetalhe1->DataProcedimentoLicitatorio   = $this->formataData($this->dtDataGeracao);//str_pad("", 10 , " ");
+            $oDadosDetalhe1->CodigoProcedimentoDespesa     = str_pad($oDados->codigolicitacaotribunal, 4  , "0", STR_PAD_LEFT);
+            $oDadosDetalhe1->NumeroReciboProcessoLicitacao = str_pad($oDados->numeroprocessolicitatorio, 10 , " ", STR_PAD_LEFT); 
+            $oDadosDetalhe1->DataProcedimentoLicitatorio   = $this->formataData("2016-06-01");//str_pad("", 10 , " ");
             $oDadosDetalhe1->NumeroEmpenho                 = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
             $oDadosDetalhe1->TipoEmpenho                   = str_pad($oDados->e60_codtipo ? $oDados->e60_codtipo : "E", 1, " ");             
             $oDadosDetalhe1->DataEmpenho                   = $this->formataData($oDados->e60_emiss);
@@ -270,12 +306,13 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
      * Busca os dados dos lançamentos dos empenhos
      */
     $sSqlDados = "select *,
-                         (select T1.cpf from (select max(plugins.documentoassinaturaordenadordespesa.sequencial), cpf 
+                         (select T1.cpf from (select max(plugins.documentoassinaturaordenadordespesa.sequencial), z01_cgccpf as cpf
                                                 from plugins.documentoassinaturaordenadordespesa 
                                                      inner join plugins.assinaturaordenadordespesa on assinaturaordenadordespesa.sequencial = documentoassinaturaordenadordespesa.assinaturaordenadordespesa
+                                                     inner join cgm on z01_numcgm = plugins.assinaturaordenadordespesa.numcgm
                                                where documentoassinaturaordenadordespesa.chave = c75_numemp 
                                                  and documentoassinaturaordenadordespesa.tipo = 1
-                                               group by chave, cpf) T1) as numerodocumentoordenador,
+                                               group by chave, z01_cgccpf) T1) as numerodocumentoordenador,
                          (select e150_numeroprocesso 
                             from empautorizaprocesso inner join empempaut 
                                         on e150_empautoriza = e61_autori
@@ -295,6 +332,8 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
                         inner join cgm                      on z01_numcgm                   = e60_numcgm
                         inner join orcdotacao               on o58_coddot                   = e60_coddot
                                                            and o58_anousu                   = e60_anousu
+                         left join conlancamcorgrupocorrente on c23_conlancam               = c70_codlan
+                         left join corgrupocorrente         on k105_sequencial              = c23_corgrupocorrente 
                          left join conlancamnota            on c66_codlan                   = c70_codlan 
                          left join conlancampag             on c82_codlan                   = c70_codlan
                          left join conlancamcompl           on c70_codlan                   = c72_codlan
@@ -319,22 +358,23 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
                      and e60_emiss >= '2016-01-01'
                      and e60_anousu = {$iAnoSessao}
                      {$sOrcDotacaoWhere}";
+//die($sSqlDados);
     $rsDados  =  db_query($sSqlDados);
     $iLinhasDados =  pg_num_rows($rsDados);
     if ($iLinhasDados > 0) {
-    	
-    	/*
-    	 * DETALHE 2
-    	 * LIQUIDACOES
-    	 */
+      
+      /*
+       * DETALHE 2
+       * LIQUIDACOES
+       */
       $aLiquidacoesImportadas = array("");
-    	for ($iIndLiq = 0; $iIndLiq < $iLinhasDados; $iIndLiq++) {
-    	
-    		$oDados = db_utils::fieldsMemory($rsDados, $iIndLiq);
-    	
-    		if ($oDados->c57_sequencial != 20 || in_array($oDados->e69_codnota, $aLiquidacoesImportadas)) {
-    			continue;
-    		}
+      for ($iIndLiq = 0; $iIndLiq < $iLinhasDados; $iIndLiq++) {
+      
+        $oDados = db_utils::fieldsMemory($rsDados, $iIndLiq);
+      
+        if ($oDados->c57_sequencial != 20 || in_array($oDados->e69_codnota, $aLiquidacoesImportadas)) {
+          continue;
+        }
 
         $codUnidade = str_pad($oDados->o58_orgao, 2, "0", STR_PAD_LEFT); 
         if ($oDados->o58_orgao == "24" && $oDados->o58_unidade == "20") {
@@ -342,38 +382,38 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
         } else {
           $codUnidade .= str_pad($oDados->o58_unidade, 2, "0", STR_PAD_LEFT);
         }        
-    	 
+       
         $aLiquidacoesImportadas[] = $oDados->e69_codnota;
-    		$nLinhasArquivo++;
-    		$oDadosDetalhe2 = new stdClass();
-    		 
-    		$oDadosDetalhe2->TipRegistro         = "2";
-    		$oDadosDetalhe2->BimReferencia       = $this->sBimReferencia;
-    		$oDadosDetalhe2->ProcessoDespesa     = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
-    		$oDadosDetalhe2->NumeroEmpenho       = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
-    		$oDadosDetalhe2->NumeroProcesso      = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT); 
-    		$oDadosDetalhe2->ClassInstitucional  = str_pad($codUnidade, 11, " ");
-    		$oDadosDetalhe2->CodDocFiscal        = str_pad(substr($oDados->e69_tipodocumentosfiscal, 0, 4), 4, "0", STR_PAD_LEFT);
-    		$oDadosDetalhe2->NumDocFiscal        = str_pad(substr((!is_int($oDados->e69_numero) ? "" : $oDados->e69_numero), 0, 9),   9, "0",STR_PAD_LEFT);
-    		$oDadosDetalhe2->SerieFiscal         = str_pad("",   3, "0",STR_PAD_LEFT); // @todo Hélio - Verificar
-    		$oDadosDetalhe2->DataEmissaoDocFis   = $this->formataData($oDados->e69_dtnota);//str_pad("",  10, "0",STR_PAD_LEFT); // @todo Hélio - Verificar
-    		$oDadosDetalhe2->ChaveFiscal         = str_pad("",  44, "0",STR_PAD_LEFT);
-    		$oDadosDetalhe2->ValorFaturado       = str_pad("",  14, "0",STR_PAD_LEFT); // @todo Hélio - Verificar
-    		$oDadosDetalhe2->NumeroDocLiquid     = str_pad($oDados->e69_codnota,  15, "0",STR_PAD_LEFT);
-    		$oDadosDetalhe2->DataLiquidacao      = $this->formataData($oDados->e69_dtnota);
-    		$oDadosDetalhe2->ValorLiquidado      = $this->formataValor($oDados->c70_valor, 14, "0");
+        $nLinhasArquivo++;
+        $oDadosDetalhe2 = new stdClass();
+         
+        $oDadosDetalhe2->TipRegistro         = "2";
+        $oDadosDetalhe2->BimReferencia       = $this->sBimReferencia;
+        $oDadosDetalhe2->ProcessoDespesa     = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
+        $oDadosDetalhe2->NumeroEmpenho       = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
+        $oDadosDetalhe2->NumeroProcesso      = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT); 
+        $oDadosDetalhe2->ClassInstitucional  = str_pad($codUnidade, 11, " ");
+        $oDadosDetalhe2->CodDocFiscal        = str_pad(substr($oDados->e69_tipodocumentosfiscal, 0, 4), 4, "0", STR_PAD_LEFT);
+        $oDadosDetalhe2->NumDocFiscal        = str_pad(substr((!is_int($oDados->e69_numero) ? "" : $oDados->e69_numero), 0, 9),   9, "0",STR_PAD_LEFT);
+        $oDadosDetalhe2->SerieFiscal         = str_pad("",   3, "0",STR_PAD_LEFT); // @todo Hélio - Verificar
+        $oDadosDetalhe2->DataEmissaoDocFis   = $this->formataData($oDados->e69_dtnota);//str_pad("",  10, "0",STR_PAD_LEFT); // @todo Hélio - Verificar
+        $oDadosDetalhe2->ChaveFiscal         = str_pad("",  44, "0",STR_PAD_LEFT);
+        $oDadosDetalhe2->ValorFaturado       = str_pad("",  14, "0",STR_PAD_LEFT); // @todo Hélio - Verificar
+        $oDadosDetalhe2->NumeroDocLiquid     = str_pad($oDados->e69_codnota,  15, "0",STR_PAD_LEFT);
+        $oDadosDetalhe2->DataLiquidacao      = $this->formataData($oDados->c70_data);
+        $oDadosDetalhe2->ValorLiquidado      = $this->formataValor($oDados->c70_valor, 14, "0");
         $oDadosDetalhe2->TipoDocumentoCredor = strlen($oDados->documento_credor) == 11 ? "0" : "1";
-    		$oDadosDetalhe2->DocumentoCredor     = str_pad(($oDados->documento_credor == "99999999999999" ? "08241747000143" : $oDados->documento_credor), 14, "0", STR_PAD_LEFT);
-    		$oDadosDetalhe2->DocumentoRespons    = str_pad($oDados->numerodocumentoordenador,  11, " ",STR_PAD_LEFT);
-    		$oDadosDetalhe2->Brancos1            = str_repeat(" ", 228);
-    		$oDadosDetalhe2->NumRegistroLido     = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
-    	
-    		$oDadosDetalhe2->codigolinha         = 2000767;
-    	
-    		$this->aDados[] = $oDadosDetalhe2;
-    	
-    		if ($lDebug) {
-    			$sLinhaDetalhe2 = $oDadosDetalhe2->TipRegistro        . 
+        $oDadosDetalhe2->DocumentoCredor     = str_pad(($oDados->documento_credor == "99999999999999" ? "08241747000143" : $oDados->documento_credor), 14, "0", STR_PAD_LEFT);
+        $oDadosDetalhe2->DocumentoRespons    = str_pad($oDados->numerodocumentoordenador,  11, " ",STR_PAD_LEFT);
+        $oDadosDetalhe2->Brancos1            = str_repeat(" ", 228);
+        $oDadosDetalhe2->NumRegistroLido     = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
+      
+        $oDadosDetalhe2->codigolinha         = 2000767;
+      
+        $this->aDados[] = $oDadosDetalhe2;
+      
+        if ($lDebug) {
+          $sLinhaDetalhe2 = $oDadosDetalhe2->TipRegistro        . 
                                   $oDadosDetalhe2->BimReferencia      . 
                                   $oDadosDetalhe2->ProcessoDespesa    . 
                                   $oDadosDetalhe2->NumeroEmpenho      . 
@@ -393,76 +433,142 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
                                   $oDadosDetalhe2->DocumentoRespons   . 
                                   $oDadosDetalhe2->Brancos1           . 
                                   $oDadosDetalhe2->NumRegistroLido     ;
-    			fputs($arqFinal, $sLinhaDetalhe2."\r\n");
-    		}
-    	}
-    	
-    	/*
-    	 * DETALHE 3
-    	 * PAGAMENTOS
-    	 */
-    	//Array de empenhos que não devem ser incluí­dos
+          fputs($arqFinal, $sLinhaDetalhe2."\r\n");
+        }
+      }
+      
+      /*
+       * DETALHE 3
+       * PAGAMENTOS
+       */
       $aPagamentosImportados = array("");
       for ($iIndPag = 0; $iIndPag < $iLinhasDados; $iIndPag++) {
           
         $oDados = db_utils::fieldsMemory($rsDados, $iIndPag);
+        //Só vai importar se for pagamento, se não for uma retenção, e se não tiver sido importado
+        if ($oDados->k105_corgrupotipo != 2 && $oDados->c57_sequencial == 30 && !in_array($oDados->e50_codord, $aPagamentosImportados)) {
+          $codUnidade = str_pad($oDados->o58_orgao, 2, "0", STR_PAD_LEFT); 
+          if ($oDados->o58_orgao == "24" && $oDados->o58_unidade == "20") {
+            $codUnidade .= "220";
+          } else {
+            $codUnidade .= str_pad($oDados->o58_unidade, 2, "0", STR_PAD_LEFT);
+          }
+
+          $aPagamentosImportados[] = $oDados->e50_codord;
+          $nLinhasArquivo++;
+          $oDadosDetalhe3 = new stdClass();
+           
+          $oDadosDetalhe3->TipRegistro         = "3";   
+          $oDadosDetalhe3->BimReferencia       = $this->sBimReferencia;
+          $oDadosDetalhe3->ProcessoDespesa     = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
+          $oDadosDetalhe3->NumeroEmpenho       = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
+          $oDadosDetalhe3->NumeroProcesso      = str_pad($oDados->processo_despesa,  20, " ", STR_PAD_LEFT); 
+          $oDadosDetalhe3->ClassInstitucional  = str_pad($codUnidade, 11, " ");   
+          $oDadosDetalhe3->NumeroDocLiquid     = str_pad($oDados->e71_codnota,  15, "0",STR_PAD_LEFT);
+          $oDadosDetalhe3->DomicilioBancario   = str_pad(substr($oDados->c63_banco, 0, 3),  3, " ", STR_PAD_LEFT).str_pad(substr($oDados->c63_agencia.$oDados->c63_dvagencia, 0, 6),  6, " ", STR_PAD_LEFT).str_pad(substr($oDados->c63_conta.$oDados->c63_dvconta, 0, 13), 13, " ", STR_PAD_LEFT);
+          $oDadosDetalhe3->EspecieDocumentoPag = "001";
+          $oDadosDetalhe3->NumeroDocumentoPag  = str_pad($oDados->e50_codord,  10, "0",STR_PAD_LEFT);
+          $oDadosDetalhe3->DataDocumentoPag    = $this->formataData($oDados->c70_data);
+          $oDadosDetalhe3->TipoDocumentoCredor = strlen($oDados->documento_credor) == 11 ? "0" : "1";
+          $oDadosDetalhe3->DocumentoCredor     = str_pad(($oDados->documento_credor == "99999999999999" ? "08241747000143" : $oDados->documento_credor), 14, "0", STR_PAD_LEFT);
+          $oDadosDetalhe3->ValorPago           = $this->formataValor($oDados->c70_valor, 14, "0");
+          $oDadosDetalhe3->CodigoRetencao      = str_pad("", 3, "0"); 
+          $oDadosDetalhe3->Brancos1            = str_pad("", 285, " ");
+          $oDadosDetalhe3->NumRegistroLido     = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
             
-        if (($oDados->c57_sequencial != 30) || in_array($oDados->e50_codord, $aPagamentosImportados)) {
-        	continue;
-        }	
+          $oDadosDetalhe3->codigolinha         = 2000767;
 
-        $codUnidade = str_pad($oDados->o58_orgao, 2, "0", STR_PAD_LEFT); 
-        if ($oDados->o58_orgao == "24" && $oDados->o58_unidade == "20") {
-          $codUnidade .= "220";
-        } else {
-          $codUnidade .= str_pad($oDados->o58_unidade, 2, "0", STR_PAD_LEFT);
-        }
+          $this->aDados[] = $oDadosDetalhe3;
 
-        $aPagamentosImportados[] = $oDados->e50_codord;
-        $nLinhasArquivo++;
-        $oDadosDetalhe3 = new stdClass();
-         
-        $oDadosDetalhe3->TipRegistro         = "3";   
-        $oDadosDetalhe3->BimReferencia       = $this->sBimReferencia;
-        $oDadosDetalhe3->ProcessoDespesa     = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
-        $oDadosDetalhe3->NumeroEmpenho       = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
-        $oDadosDetalhe3->NumeroProcesso      = str_pad($oDados->processo_despesa,  20, " ", STR_PAD_LEFT); 
-        $oDadosDetalhe3->ClassInstitucional  = str_pad($codUnidade, 11, " ");   
-        $oDadosDetalhe3->NumeroDocLiquid     = str_pad($oDados->e71_codnota,  15, "0",STR_PAD_LEFT);
-        $oDadosDetalhe3->DomicilioBancario   = str_pad(substr($oDados->c63_banco, 0, 3),  3, " ", STR_PAD_LEFT).str_pad(substr($oDados->c63_agencia.$oDados->c63_dvagencia, 0, 6),  6, " ", STR_PAD_LEFT).str_pad(substr($oDados->c63_conta.$oDados->c63_dvconta, 0, 13), 13, " ", STR_PAD_LEFT);
-        $oDadosDetalhe3->EspecieDocumentoPag = "001";
-        $oDadosDetalhe3->NumeroDocumentoPag  = str_pad($oDados->e50_codord,  10, "0",STR_PAD_LEFT);
-        $oDadosDetalhe3->DataDocumentoPag    = $this->formataData($oDados->c70_data);
-        $oDadosDetalhe3->TipoDocumentoCredor = strlen($oDados->documento_credor) == 11 ? "0" : "1";
-        $oDadosDetalhe3->DocumentoCredor     = str_pad(($oDados->documento_credor == "99999999999999" ? "08241747000143" : $oDados->documento_credor), 14, "0", STR_PAD_LEFT);
-        $oDadosDetalhe3->ValorPago           = $this->formataValor($oDados->c70_valor, 14, "0");
-        $oDadosDetalhe3->CodigoRetencao      = str_pad("", 3, "0"); // @todo Hélio - verificar
-        $oDadosDetalhe3->Brancos1            = str_pad("", 285, " ");
-        $oDadosDetalhe3->NumRegistroLido     = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
-          
-        $oDadosDetalhe3->codigolinha         = 2000767;
+          if ($lDebug) {
+            $sLinhaDetalhe3 = $oDadosDetalhe3->TipRegistro        
+                              .$oDadosDetalhe3->BimReferencia       
+                              .$oDadosDetalhe3->ProcessoDespesa     
+                              .$oDadosDetalhe3->NumeroEmpenho       
+                              .$oDadosDetalhe3->NumeroProcesso      
+                              .$oDadosDetalhe3->ClassInstitucional  
+                              .$oDadosDetalhe3->NumeroDocLiquid     
+                              .$oDadosDetalhe3->DomicilioBancario   
+                              .$oDadosDetalhe3->EspecieDocumentoPag 
+                              .$oDadosDetalhe3->NumeroDocumentoPag  
+                              .$oDadosDetalhe3->DataDocumentoPag  
+                              .$oDadosDetalhe3->TipoDocumentoCredor     
+                              .$oDadosDetalhe3->DocumentoCredor     
+                              .$oDadosDetalhe3->ValorPago           
+                              .$oDadosDetalhe3->CodigoRetencao      
+                              .$oDadosDetalhe3->Brancos1            
+                              .$oDadosDetalhe3->NumRegistroLido;    
+            fputs($arqFinal, $sLinhaDetalhe3."\r\n");
+          }
+        } 
 
-        $this->aDados[] = $oDadosDetalhe3;
+        if ($oDados->k105_corgrupotipo == 2 && $oDados->c57_sequencial == 30) {
+          $codUnidade = str_pad($oDados->o58_orgao, 2, "0", STR_PAD_LEFT); 
+          if ($oDados->o58_orgao == "24" && $oDados->o58_unidade == "20") {
+            $codUnidade .= "220";
+          } else {
+            $codUnidade .= str_pad($oDados->o58_unidade, 2, "0", STR_PAD_LEFT);
+          }
+          //Busca as retenções da ordem e insere
+          $sSqlRetencoes = "SELECT * 
+                            FROM retencaopagordem
+                              INNER JOIN retencaoreceitas ON e23_retencaopagordem = e20_sequencial
+                                                         AND e23_ativo            = 't'
+                                                         AND e23_recolhido        = 't'
+                            WHERE e20_pagordem = {$oDados->e50_codord} and e23_dtcalculo between '{$this->dtDataInicial}' and '{$this->dtDataFinal}'";
+          $rsRetencoes = db_query($sSqlRetencoes);
 
-        if ($lDebug) {
-          $sLinhaDetalhe3 = $oDadosDetalhe3->TipRegistro        
-                            .$oDadosDetalhe3->BimReferencia       
-                            .$oDadosDetalhe3->ProcessoDespesa     
-                            .$oDadosDetalhe3->NumeroEmpenho       
-                            .$oDadosDetalhe3->NumeroProcesso      
-                            .$oDadosDetalhe3->ClassInstitucional  
-                            .$oDadosDetalhe3->NumeroDocLiquid     
-                            .$oDadosDetalhe3->DomicilioBancario   
-                            .$oDadosDetalhe3->EspecieDocumentoPag 
-                            .$oDadosDetalhe3->NumeroDocumentoPag  
-                            .$oDadosDetalhe3->DataDocumentoPag  
-                            .$oDadosDetalhe3->TipoDocumentoCredor     
-                            .$oDadosDetalhe3->DocumentoCredor     
-                            .$oDadosDetalhe3->ValorPago           
-                            .$oDadosDetalhe3->CodigoRetencao      
-                            .$oDadosDetalhe3->Brancos1            
-                            .$oDadosDetalhe3->NumRegistroLido;    
-          fputs($arqFinal, $sLinhaDetalhe3."\r\n");
+          if(pg_num_rows($rsRetencoes) > 0) {
+
+            for ($i=0; $i<pg_num_rows($rsRetencoes); $i++) {
+
+              $nLinhasArquivo++;
+              $oDadosRetencoes = db_utils::fieldsMemory($rsRetencoes, $i);
+              $oDadosDetalhe3 = new stdClass();
+             
+              $oDadosDetalhe3->TipRegistro         = "3";   
+              $oDadosDetalhe3->BimReferencia       = $this->sBimReferencia;
+              $oDadosDetalhe3->ProcessoDespesa     = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
+              $oDadosDetalhe3->NumeroEmpenho       = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
+              $oDadosDetalhe3->NumeroProcesso      = str_pad($oDados->processo_despesa,  20, " ", STR_PAD_LEFT); 
+              $oDadosDetalhe3->ClassInstitucional  = str_pad($codUnidade, 11, " ");   
+              $oDadosDetalhe3->NumeroDocLiquid     = str_pad($oDados->e71_codnota,  15, "0",STR_PAD_LEFT);
+              $oDadosDetalhe3->DomicilioBancario   = str_pad(substr($oDados->c63_banco, 0, 3),  3, " ", STR_PAD_LEFT).str_pad(substr($oDados->c63_agencia.$oDados->c63_dvagencia, 0, 6),  6, " ", STR_PAD_LEFT).str_pad(substr($oDados->c63_conta.$oDados->c63_dvconta, 0, 13), 13, " ", STR_PAD_LEFT);
+              $oDadosDetalhe3->EspecieDocumentoPag = "001";
+              $oDadosDetalhe3->NumeroDocumentoPag  = str_pad($oDados->e50_codord,  10, "0",STR_PAD_LEFT);
+              $oDadosDetalhe3->DataDocumentoPag    = $this->formataData($oDados->c70_data);
+              $oDadosDetalhe3->TipoDocumentoCredor = strlen($oDados->documento_credor) == 11 ? "0" : "1";
+              $oDadosDetalhe3->DocumentoCredor     = str_pad(($oDados->documento_credor == "99999999999999" ? "08241747000143" : $oDados->documento_credor), 14, "0", STR_PAD_LEFT);
+              $oDadosDetalhe3->ValorPago           = $this->formataValor($oDadosRetencoes->e23_valorretencao, 14, "0");
+              $oDadosDetalhe3->CodigoRetencao      = str_pad("", 3, "0");//str_pad($oDadosRetencoes->e23_retencaotiporec, 3, "0"); 
+              $oDadosDetalhe3->Brancos1            = str_pad("", 285, " ");
+              $oDadosDetalhe3->NumRegistroLido     = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
+                
+              $oDadosDetalhe3->codigolinha         = 2000767;
+              $this->aDados[] = $oDadosDetalhe3;
+
+              if ($lDebug) {
+                $sLinhaDetalhe3 = $oDadosDetalhe3->TipRegistro        
+                                  .$oDadosDetalhe3->BimReferencia       
+                                  .$oDadosDetalhe3->ProcessoDespesa     
+                                  .$oDadosDetalhe3->NumeroEmpenho       
+                                  .$oDadosDetalhe3->NumeroProcesso      
+                                  .$oDadosDetalhe3->ClassInstitucional  
+                                  .$oDadosDetalhe3->NumeroDocLiquid     
+                                  .$oDadosDetalhe3->DomicilioBancario   
+                                  .$oDadosDetalhe3->EspecieDocumentoPag 
+                                  .$oDadosDetalhe3->NumeroDocumentoPag  
+                                  .$oDadosDetalhe3->DataDocumentoPag  
+                                  .$oDadosDetalhe3->TipoDocumentoCredor     
+                                  .$oDadosDetalhe3->DocumentoCredor     
+                                  .$oDadosDetalhe3->ValorPago           
+                                  .$oDadosDetalhe3->CodigoRetencao      
+                                  .$oDadosDetalhe3->Brancos1            
+                                  .$oDadosDetalhe3->NumRegistroLido;    
+                fputs($arqFinal, $sLinhaDetalhe3."\r\n");
+              }
+            }
+          }
         }
       }
         
@@ -481,8 +587,8 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
             $sMotivoAnul = "";
             
             if (($oDados->c57_sequencial != 11) || in_array($oDados->c70_codlan, $aAnulEmpImportados)) {
-              continue;	
-            }	
+              continue; 
+            } 
 
             $codUnidade = str_pad($oDados->o58_orgao, 2, "0", STR_PAD_LEFT); 
             if ($oDados->o58_orgao == "24" && $oDados->o58_unidade == "20") {
@@ -540,11 +646,11 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
         $aAnulLiqImportados = array("");
         for ($iIndAnuLiq = 0; $iIndAnuLiq < $iLinhasDados; $iIndAnuLiq++) {
         
-        	$oDados = db_utils::fieldsMemory($rsDados, $iIndAnuLiq);
-        	
-        	if (($oDados->c57_sequencial != 21) || in_array($oDados->c70_codlan, $aAnulLiqImportados)) {
-        		continue;
-        	}
+          $oDados = db_utils::fieldsMemory($rsDados, $iIndAnuLiq);
+          
+          if (($oDados->c57_sequencial != 21) || in_array($oDados->c70_codlan, $aAnulLiqImportados)) {
+            continue;
+          }
 
           $codUnidade = str_pad($oDados->o58_orgao, 2, "0", STR_PAD_LEFT); 
           if ($oDados->o58_orgao == "24" && $oDados->o58_unidade == "20") {
@@ -553,33 +659,33 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
             $codUnidade .= str_pad($oDados->o58_unidade, 2, "0", STR_PAD_LEFT);
           }
         
-        	$nLinhasArquivo++;
+          $nLinhasArquivo++;
 
           $aAnulLiqImportados[] = $oDados->c70_codlan;
-        	$oDadosDetalhe4 = new stdClass();
-        	 
-        	$oDadosDetalhe5->TipRegistro        = "5";
-        	$oDadosDetalhe5->BimReferencia      = $this->sBimReferencia;
-        	$oDadosDetalhe5->ProcessoDespesa    = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
-        	$oDadosDetalhe5->NumeroEmpenho      = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
-        	$oDadosDetalhe5->ClassInstitucional = str_pad($codUnidade, 11, " ");
-        	$oDadosDetalhe5->NumeroDocLiquid    = str_pad($oDados->e69_codnota,  15, "0",STR_PAD_LEFT);
-        	$oDadosDetalhe5->NotaAnulacao       = str_pad($oDados->c70_codlan, 12, "0", STR_PAD_RIGHT);
-        	$oDadosDetalhe5->Brancos1           = " ";
-        	$oDadosDetalhe5->ValorAnulado       = $this->formataValor($oDados->c70_valor, 14, "0");
-        	$oDadosDetalhe5->MotivoAnulacao     = str_pad(DBString::removerCaracteresEspeciais(substr($oDados->c72_complem, 0, 50)), 50, "0", STR_PAD_LEFT);
-        	$oDadosDetalhe5->DataAnulacao       = $this->formataData($oDados->c70_data);
-        	$oDadosDetalhe5->Brancos2           = str_pad("", 295, " ", STR_PAD_LEFT);
-        	$oDadosDetalhe5->NumRegistroLido    = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
+          $oDadosDetalhe4 = new stdClass();
+           
+          $oDadosDetalhe5->TipRegistro        = "5";
+          $oDadosDetalhe5->BimReferencia      = $this->sBimReferencia;
+          $oDadosDetalhe5->ProcessoDespesa    = str_pad($oDados->processo_despesa, 20, "0", STR_PAD_LEFT);
+          $oDadosDetalhe5->NumeroEmpenho      = str_pad($oDados->e60_codemp, 15, "0", STR_PAD_LEFT);
+          $oDadosDetalhe5->ClassInstitucional = str_pad($codUnidade, 11, " ");
+          $oDadosDetalhe5->NumeroDocLiquid    = str_pad($oDados->e69_codnota,  15, "0",STR_PAD_LEFT);
+          $oDadosDetalhe5->NotaAnulacao       = str_pad($oDados->c70_codlan, 12, "0", STR_PAD_RIGHT);
+          $oDadosDetalhe5->Brancos1           = " ";
+          $oDadosDetalhe5->ValorAnulado       = $this->formataValor($oDados->c70_valor, 14, "0");
+          $oDadosDetalhe5->MotivoAnulacao     = str_pad(DBString::removerCaracteresEspeciais(substr($oDados->c72_complem, 0, 50)), 50, "0", STR_PAD_LEFT);
+          $oDadosDetalhe5->DataAnulacao       = $this->formataData($oDados->c70_data);
+          $oDadosDetalhe5->Brancos2           = str_pad("", 295, " ", STR_PAD_LEFT);
+          $oDadosDetalhe5->NumRegistroLido    = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
         
-        	$oDadosDetalhe5->codigolinha     = 2000769;
+          $oDadosDetalhe5->codigolinha     = 2000769;
         
-        	$this->aDados[] = $oDadosDetalhe5;
+          $this->aDados[] = $oDadosDetalhe5;
         
-        	if ($lDebug) {
-        		 
-        		$sLinhaDetalhe5 = $oDadosDetalhe5->TipRegistro
-        		                 .$oDadosDetalhe5->BimReferencia
+          if ($lDebug) {
+             
+            $sLinhaDetalhe5 = $oDadosDetalhe5->TipRegistro
+                             .$oDadosDetalhe5->BimReferencia
                              .$oDadosDetalhe5->ProcessoDespesa
                              .$oDadosDetalhe5->NumeroEmpenho
                              .$oDadosDetalhe5->ClassInstitucional
@@ -591,8 +697,8 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
                              .$oDadosDetalhe5->DataAnulacao
                              .$oDadosDetalhe5->Brancos2
                              .$oDadosDetalhe5->NumRegistroLido;
-        		fputs($arqFinal, $sLinhaDetalhe5."\r\n");
-        	}
+            fputs($arqFinal, $sLinhaDetalhe5."\r\n");
+          }
         
         }
         
@@ -632,7 +738,7 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
             $oDadosDetalhe6->NotaAnulacao       = str_pad($oDados->c70_codlan, 12, "0", STR_PAD_RIGHT);
             $oDadosDetalhe6->Brancos1           = " ";
             $oDadosDetalhe6->ValorAnulado       = $this->formataValor($oDados->c70_valor, 14, "0");
-            $oDadosDetalhe6->MotivoAnulacao     = str_pad(DBString::removerCaracteresEspeciais($oDados->c72_complem), 50, "0", STR_PAD_LEFT);
+            $oDadosDetalhe6->MotivoAnulacao     = str_pad(DBString::removerCaracteresEspeciais(substr($oDados->c72_complem, 0, 50)), 50, "0", STR_PAD_LEFT);
             $oDadosDetalhe6->DataAnulacao       = $this->formataData($oDados->c70_data);
             $oDadosDetalhe6->Brancos2           = str_repeat(" ", 285);
             $oDadosDetalhe6->NumRegistroLido    = str_pad($nLinhasArquivo, 10, "0", STR_PAD_LEFT);
@@ -642,8 +748,8 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
             $this->aDados[] = $oDadosDetalhe6;
             
             if ($lDebug) {
-            	
-            	$sLinhaDetalhe6 = $oDadosDetalhe6->TipRegistro       .        
+              
+              $sLinhaDetalhe6 = $oDadosDetalhe6->TipRegistro       .        
                                   $oDadosDetalhe6->BimReferencia     .
                                   $oDadosDetalhe6->ProcessoDespesa   .
                                   $oDadosDetalhe6->NumeroEmpenho     .
@@ -678,12 +784,12 @@ class SiaiEmpenhos extends SiaiArquivoBase implements iPadArquivoTXTBase {
     $this->aDados[] = $oDadosTrailler;
     
     if ($lDebug) {
-    	$sLinhaTrailler = $oDadosTrailler->TipRegistro    
+      $sLinhaTrailler = $oDadosTrailler->TipRegistro    
                        .$oDadosTrailler->Brancos        
                        .$oDadosTrailler->NumRegistroLido;
         fputs($arqFinal, $sLinhaTrailler."\r\n");
         fclose($arqFinal);
-    	
+      
     }
   } 
 }

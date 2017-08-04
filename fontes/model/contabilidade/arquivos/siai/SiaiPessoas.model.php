@@ -25,9 +25,9 @@
  *                                licenca/licenca_pt.txt 
  */
 
-require_once("interfaces/iPadArquivoTxtBase.interface.php");
-require_once ("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php");
-require_once ("libs/db_liborcamento.php");
+require_once(modification("interfaces/iPadArquivoTxtBase.interface.php"));
+require_once(modification("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php"));
+require_once(modification("libs/db_liborcamento.php"));
 
 class SiaiPessoas extends SiaiArquivoBase implements iPadArquivoTXTBase {
   
@@ -101,15 +101,33 @@ class SiaiPessoas extends SiaiArquivoBase implements iPadArquivoTXTBase {
 
                     union
 
-                    select distinct(cpf),
-                        cpf as cgccpf,
-                        nome,
+                    select distinct(z01_cgccpf),
+                        z01_cgccpf as cgccpf,
+                        z01_nome as nome,
                         1 as ordenador
                     from plugins.assinaturaordenadordespesa
                       inner join plugins.documentoassinaturaordenadordespesa on assinaturaordenadordespesa = plugins.assinaturaordenadordespesa.sequencial
-                    where plugins.documentoassinaturaordenadordespesa.tipo = 1 and ativo = 't'";
+                      inner join cgm on z01_numcgm = plugins.assinaturaordenadordespesa.numcgm
+                    where plugins.documentoassinaturaordenadordespesa.tipo = 1 and ativo = 't'
+
+                    union 
+
+                    select distinct(z01_cgccpf),
+                        z01_cgccpf  as cpf,
+                        (case when z01_nomecomple is null or trim(z01_nomecomple) = '' 
+                                  then z01_nome
+                                  else substr(z01_nomecomple,1,60)
+                              end) as nome,
+                        0 as ordenador
+                    from rhpessoal 
+                           inner join rhpessoalmov    on rh01_regist = rh02_regist 
+                           left  join rhpesrescisao   on rh02_seqpes = rh05_seqpes 
+                           inner join cgm             on rh01_numcgm = z01_numcgm 
+                      where rh05_seqpes is null 
+                        and rh02_lota in (18, 21, 22, 23, 25) ";
     $resultDados = pg_query($sqlPessoas);
     $iLinhasDados = pg_num_rows($resultDados);
+
     /*
     * DETALHE 1
     */
@@ -122,6 +140,7 @@ class SiaiPessoas extends SiaiArquivoBase implements iPadArquivoTXTBase {
         }
        
         $numLinha++;
+
         $oDadosDetalhe1 = new stdClass();
         $oDadosDetalhe1->TipoRegistro      = "1";
         $oDadosDetalhe1->TipoDocumento     = strlen($oDados->z01_cgccpf) == 11 ? "0" : "1";

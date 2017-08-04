@@ -24,9 +24,9 @@
  *  Copia da licenca no diretorio licenca/licenca_en.txt 
  *                                licenca/licenca_pt.txt 
  */
-require_once("interfaces/iPadArquivoTxtBase.interface.php");
-require_once ("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php");
-require_once ("libs/db_liborcamento.php");
+require_once(modification("interfaces/iPadArquivoTxtBase.interface.php"));
+require_once(modification("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php"));
+require_once(modification("libs/db_liborcamento.php"));
 
 class SiaiContaCorrente extends SiaiArquivoBase implements iPadArquivoTXTBase {
   
@@ -70,18 +70,15 @@ class SiaiContaCorrente extends SiaiArquivoBase implements iPadArquivoTXTBase {
                                                                 and ((db01_orgao = 20 and db01_unidade = 1) 
                                                                   or (db01_orgao = 20 and db01_unidade = 49)))";
         }
-    
-        if ($this->codigoOrgao == "18" && $this->codigoUnidade == "1") {
+ 
+        if ($this->codigoOrgao == "34" && $this->codigoUnidade == "1") {
             $whereDepart = "c61_instit = '{$iInstituicaoSessao}' and depart in (select db01_coddepto from db_departorg 
                                                             where db01_anousu    = '{$iAnoSessao}' 
-                                                                and ((db01_orgao = 18 and db01_unidade = 1) 
-                                                                  or (db01_orgao = 18 and db01_unidade = 45) 
-                                                                  or (db01_orgao = 18 and db01_unidade = 46) 
-                                                                  or (db01_orgao = 18 and db01_unidade = 47) 
-                                                                  or (db01_orgao = 18 and db01_unidade = 48)))";
+                                                                and ((db01_orgao = 34 and db01_unidade = 1) 
+                                                                  or (db01_orgao = 34 and db01_unidade = 49)))";
         }
 
-        if ($this->codigoOrgao == "18" && $this->codigoUnidade == "49") {
+        if ($this->codigoOrgao == "18" && $this->codigoUnidade == "1") {
             $whereDepart = "c61_instit = '{$iInstituicaoSessao}' and depart in (select db01_coddepto from db_departorg 
                                                             where db01_anousu    = '{$iAnoSessao}' 
                                                                 and ((db01_orgao = 18 and db01_unidade = 1) 
@@ -99,26 +96,30 @@ class SiaiContaCorrente extends SiaiArquivoBase implements iPadArquivoTXTBase {
 
     }
 
-    $sqlContas = "select c63_banco,
+    $sqlContas = "select distinct on (c63_banco||c63_agencia||c63_dvagencia||c63_conta||c63_dvconta)
+                         c63_banco,
                          c63_agencia,
                          c63_dvagencia,
                          c63_conta,
                          c63_dvconta,
                          db83_descricao,
-                         coalesce(plugins.assinaturaordenadordespesa.cpf, '00000000000') as cgccpf
+                         coalesce(z01_cgccpf, '00000000000') as cgccpf
                     from saltes 
-                         inner join plugins.saltesdepart  on saltes           = k13_conta and departpadrao = 't'
-                         inner join plugins.assinaturaordenadordespesa on assinaturaordenadordespesa.departamento = saltesdepart.depart
+                         inner join plugins.saltesdepart  on saltes           = k13_conta 
+                                                         and departpadrao = 't'
+                         inner join plugins.assinaturaordenadordespesa  on assinaturaordenadordespesa.departamento = saltesdepart.depart
+                                                                       and assinaturaordenadordespesa.principal is true
                          inner join conplanoreduz         on c61_reduz        = k13_reduz 
                          inner join conplanoconta         on c63_codcon       = c61_codcon 
-                                             and c63_anousu = c61_anousu
+                                                         and c63_anousu       = c61_anousu
                          inner join conplano              on c60_codcon       = c63_codcon
-                                             and c60_anousu = c63_anousu
+                                                         and c60_anousu       = c63_anousu
                          inner join conplanocontabancaria on c56_codcon       = c60_codcon
-                                             and c56_anousu = c60_anousu
+                                                         and c56_anousu       = c60_anousu
                          inner join contabancaria         on db83_sequencial  = c56_contabancaria    
+                         inner join cgm                   on z01_numcgm       = plugins.assinaturaordenadordespesa.numcgm
                           left join (select distinct z01_cgccpf as cgccpf from cgm where z01_cgccpf not in ('0', '00000000000', '00000000000000')) as cgm1 on cgm1.cgccpf = db83_identificador                
-                    where {$whereDepart} and c61_anousu = '{$iAnoSessao}'";
+                    where {$whereDepart} and plugins.assinaturaordenadordespesa.ativo = 't' and c61_anousu = '{$iAnoSessao}'";
 
     $resultContas  =  db_query($sqlContas);
     $iLinhasContas =  pg_num_rows($resultContas);    
@@ -142,7 +143,7 @@ class SiaiContaCorrente extends SiaiArquivoBase implements iPadArquivoTXTBase {
     $oDadosHeader->CodigoOrgao        = $this->codigoOrgaoTCE;
     $oDadosHeader->NomeUnidade        = str_pad($this->nomeUnidade, 100, " ", STR_PAD_RIGHT);
     $oDadosHeader->Brancos1           = " ";
-    $oDadosHeader->FornecedorSoftware = str_pad(substr("SOFTWARE PUBLICO BRASILEIRO",0,100), 100, "", STR_PAD_LEFT);
+    $oDadosHeader->FornecedorSoftware = str_pad(substr("SOFTWARE PUBLICO BRASILEIRO",0,100), 100, " ", STR_PAD_LEFT);
     $oDadosHeader->Brancos2           = str_repeat(" ", 167);
     $oDadosHeader->NumRegistroLido    = str_pad($iNumRegistroLido, 10, "0", STR_PAD_LEFT);
         
@@ -178,7 +179,7 @@ class SiaiContaCorrente extends SiaiArquivoBase implements iPadArquivoTXTBase {
                     
             $oDadosDetalhe->TipRegistro   = "1";
             $oDadosDetalhe->Brancos       = " ";
-            $oDadosDetalhe->Banco         = $oDadosContas->c63_banco;
+            $oDadosDetalhe->Banco         = str_pad($oDadosContas->c63_banco, 3, " ", STR_PAD_LEFT);
             $oDadosDetalhe->Agencia       = str_pad($oDadosContas->c63_agencia.$oDadosContas->c63_dvagencia, 6, " ", STR_PAD_LEFT);
             $oDadosDetalhe->ContaCorrente = str_pad($oDadosContas->c63_conta.$oDadosContas->c63_dvconta, 13, " ", STR_PAD_LEFT);
             $oDadosDetalhe->DescConta     = str_pad(substr(($oDadosContas->db83_descricao ? $oDadosContas->db83_descricao :'S/ Descr'), 0, 50), 50, " ", STR_PAD_RIGHT);  

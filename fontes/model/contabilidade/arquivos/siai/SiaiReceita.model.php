@@ -24,9 +24,9 @@
  * Copia da licenca no diretorio licenca/licenca_en.txt
  * licenca/licenca_pt.txt
  */
-require_once ("interfaces/iPadArquivoTxtBase.interface.php");
-require_once ("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php");
-require_once ("libs/db_liborcamento.php");
+require_once(modification("interfaces/iPadArquivoTxtBase.interface.php"));
+require_once(modification("model/contabilidade/arquivos/siai/SiaiArquivoBase.model.php"));
+require_once(modification("libs/db_liborcamento.php"));
 class SiaiReceita extends SiaiArquivoBase implements iPadArquivoTXTBase {
 	protected $iCodigoLayout = 2000002;
 
@@ -76,8 +76,24 @@ class SiaiReceita extends SiaiArquivoBase implements iPadArquivoTXTBase {
 		}
 		
 		$oDaoOrcTipoRec    = db_utils::getDao ( "orctiporec" );
-		$rsOrcTipoRec 	   = $oDaoOrcTipoRec->sql_record ( $oDaoOrcTipoRec->sql_query_file ( null, "o15_codigo, o15_descr", "o15_codigo" ) );
-		$iLinhasOrcTipoRec = $oDaoOrcTipoRec->numrows;
+		
+
+		/*$rsOrcTipoRec 	   = $oDaoOrcTipoRec->sql_record ( $oDaoOrcTipoRec->sql_query_file ( null, "(case when 
+																											(select distinct fonte_tce from plugins.deparafontetce where fonte_orcamento = o15_codigo limit 1) is not null 
+																										then (select distinct fonte_tce from plugins.deparafontetce where fonte_orcamento = o15_codigo limit 1) 
+																									else cast(o15_codigo as varchar) end) as o15_codigo, o15_descr", "o15_codigo" ) );*/
+		if (db_getsession('DB_anousu') >= 2017) {
+			$rsOrcTipoRec      = pg_query("select distinct fonte_tce as o15_codigo, o15_descr 
+											from plugins.deparafontetce 
+												inner join orctiporec on o15_codigo = fonte_orcamento
+											where exercicio = {$this->iAnoUso} 
+											order by o15_codigo");																						
+		} else {
+			$rsOrcTipoRec 	   = $oDaoOrcTipoRec->sql_record ( $oDaoOrcTipoRec->sql_query_file ( null, "o15_codigo, o15_descr", "o15_codigo" ) );
+		}
+
+		$iLinhasOrcTipoRec = pg_num_rows($rsOrcTipoRec);
+
 		if ($iLinhasOrcTipoRec > 0) {
 			/*
 			 * DETALHE 1
@@ -85,12 +101,17 @@ class SiaiReceita extends SiaiArquivoBase implements iPadArquivoTXTBase {
 			 *
 			 */
 			for($iInd = 0; $iInd < $iLinhasOrcTipoRec; $iInd ++) {
-				
+
 				$oDadosOrcTipoRec = db_utils::fieldsMemory ( $rsOrcTipoRec, $iInd );
+								
+				if(str_pad(substr($oDadosOrcTipoRec->o15_codigo, 0, 10)  , 10, "0", STR_PAD_LEFT) == "0000000000") {
+					continue;
+				}
+
 				$iNumLinha++;
 				$oDadosDetalhe1 = new stdClass ();
 				$oDadosDetalhe1->tipregistro   = "1";
-				$oDadosDetalhe1->brancos1      = " ";
+				$oDadosDetalhe1->tipocadastro  = "0";
 				$oDadosDetalhe1->numerodafonte = str_pad(substr($oDadosOrcTipoRec->o15_codigo, 0, 10)  , 10, "0", STR_PAD_LEFT);
 				$oDadosDetalhe1->descricao     = str_pad(substr($oDadosOrcTipoRec->o15_codigo != "000"? $oDadosOrcTipoRec->o15_descr : " ", 0, 350) , 350," ");
 				$oDadosDetalhe1->brancos2      = str_repeat(" ", 47);
@@ -101,8 +122,8 @@ class SiaiReceita extends SiaiArquivoBase implements iPadArquivoTXTBase {
 				
 				if ($lDebug) {
 					$sLinhaRecurso = $oDadosDetalhe1->tipregistro
-									 ." | ".$oDadosDetalhe1->brancos1
-					                 ." | ".$oDadosDetalhe1->numerodafonte
+									 ." | ".$oDadosDetalhe1->tipocadastro	
+									 ." | ".$oDadosDetalhe1->numerodafonte
 					                 ." | ".$oDadosDetalhe1->descricao
 			                		 ." | ".$oDadosDetalhe1->brancos2
 			                		 ." | ".$oDadosDetalhe1->NumRegistroLido;
@@ -115,107 +136,136 @@ class SiaiReceita extends SiaiArquivoBase implements iPadArquivoTXTBase {
 			 * DETALHE2
 			 * Dados das Receitas
 			 */
-
 			$sWhere = ""; //"o70_instit = " . db_getsession ( "DB_instit" );
-			$rsReceitaSaldo = db_receitasaldo ( 11, 1, 3, true, $sWhere, $this->iAnoUso, $this->dtDataInicial, $this->dtDataFinal, false);
-			
-			$sql_receita = "select 
-						coalesce(substr(T.rec_tce, 1, 9), substr(o57_fonte, 1, 9)) as fonte,
-						orcreceita.o70_codigo as o70_codigo,
-						sum(saldo_inicial) as saldo_inicial, 
-                                               	sum(saldo_inicial_prevadic) as saldo_inicial_prevadic,
-                                               	sum(saldo_arrecadado) as saldo_arrecadado,
-                                               	sum(saldo_arrecadado_acumulado) as saldo_arrecadado_acumulado
-					from work_receita
-						inner join orcreceita on orcreceita.o70_codrec = work_receita.o70_codrec and orcreceita.o70_anousu = $this->iAnoUso 
-						inner join orcfontes on o70_codfon = o57_codfon and o70_anousu = o57_anousu  
-						 left join (select rec_ecidade, rec_tce from plugins.receita_siai_de_para) as T on T.rec_ecidade = substr(o57_fonte, 1, 9)||'0'
-					group by fonte,orcreceita.o70_codigo
-					order by fonte
-					";
+			$aReceitasIncluidas = array();
 
-			$res_receita = db_query($sql_receita,0);
-			//db_criatabela($res_receita);exit;	
-                        
-                        /*$sSqlReceita = "select o57_fonte, 
-                                               o70_codigo, 
-                                               sum(saldo_inicial) as saldo_inicial, 
-                                               sum(saldo_inicial_prevadic) as saldo_inicial_prevadic, 
-                                               sum(saldo_arrecadado) as saldo_arrecadado, 
-                                               sum(saldo_arrecadado_acumulado) as saldo_arrecadado_acumulado, 
-                                               array_to_string(array_accum(distinct o70_codrec), ',') as o70_codrec
-                                         from ({$rsReceitaSaldo}) as dados
-                                        group by o57_fonte,o70_codrec
-                                        order by o57_fonte,o70_codrec";
-                        $rsReceitaSaldo = db_query($sSqlReceita);*/
+			$rsReceitaSaldo = db_receitasaldo (11, 1, 3, true, $sWhere, $this->iAnoUso, $this->dtDataInicial, $this->dtDataFinal, false);
+			//db_criatabela($rsReceitaSaldo);
+			for($i = 0; $i < $iLinhasOrcTipoRec; $i ++) {
 
-			//echo pg_num_rows ( $rsReceitaSaldo ) . " - " . pg_num_rows ( $res_receita );exit;
-			//$iLinhasOrcReceita = pg_num_rows ( $rsReceitaSaldo );
-			$iLinhasOrcReceita = pg_num_rows ( $res_receita );
-			for($iInd = 0; $iInd < $iLinhasOrcReceita; $iInd ++) {
-				
-				$oDadosOrcReceita = db_utils::fieldsMemory ( $res_receita, $iInd );
+				$oDadosOrcTipoRec = db_utils::fieldsMemory ( $rsOrcTipoRec, $i );
 
-				/*
-				 * Somente irá constar as receitas analiticas e que possuirem vinculo na orcreceita
-				 */
-				
-				if ($oDadosOrcReceita->o70_codigo == "0" || $oDadosOrcReceita->o70_codigo == "") {
+				if(str_pad(substr($oDadosOrcTipoRec->o15_codigo, 0, 10)  , 10, "0", STR_PAD_LEFT) == "0000000000") {
 					continue;
 				}
+
 				
-				// Se o Código da Receita não começar com "9" o caractere 11 ou seja ao nono caractere será em branco
-				if (substr ( $oDadosOrcReceita->fonte, 0, 1 ) != "9") {
-					$iCodigoReceita = substr ( $oDadosOrcReceita->fonte, 1, 8 );
-				} else {
-					$iCodigoReceita = substr ( $oDadosOrcReceita->fonte, 0, 8 );
-				}
-				$iNumLinha++;
-				$oDadosDetalhe2 = new stdClass ();
-				$oDadosDetalhe2->tipregistro          = "2";
-				$oDadosDetalhe2->brancos1             = " ";
-				$oDadosDetalhe2->codigoreceita        = str_pad($iCodigoReceita, 10, "0", STR_PAD_RIGHT);
-				
-				if($this->codigoOrgaoTCE != "P088") {
+				$sql_receita = "select distinct 
+									substr(coalesce(rec_tce, o57_fonte), 1, 9) as elemento,
+									coalesce(fonte_tce, '{$oDadosOrcTipoRec->o15_codigo}') as fonterecursos,
+									sum(saldo_inicial) as saldo_inicial, 
+			                        sum(saldo_inicial_prevadic) as saldo_inicial_prevadic,
+			                        sum(saldo_arrecadado) as saldo_arrecadado,
+									sum(saldo_arrecadado_acumulado) as saldo_arrecadado_acumulado
+								from work_receita
+									inner join orcreceita on orcreceita.o70_codrec = work_receita.o70_codrec and orcreceita.o70_anousu = $this->iAnoUso 
+									inner join orcfontes on o70_codfon = o57_codfon and o70_anousu = o57_anousu  
+									 left join (select rec_ecidade, rec_tce from plugins.receita_siai_de_para) as T on T.rec_ecidade = substr(o57_fonte, 1, 9)||'0'
+									inner join (select distinct fonte_orcamento, fonte_tce, exercicio 
+												from plugins.deparafontetce 
+										        where fonte_tce = '{$oDadosOrcTipoRec->o15_codigo}'
+									 	  			 and exercicio = {$this->iAnoUso} limit 1) as de_para_fonte 
+										on de_para_fonte.exercicio = o70_anousu
+					                       and orcreceita.o70_codigo = de_para_fonte.fonte_orcamento::integer 
+					            where work_receita.o70_codigo > 0 and abs(saldo_inicial + saldo_inicial_prevadic + saldo_arrecadado + saldo_arrecadado_acumulado) > 0
+								group by substr(coalesce(rec_tce, o57_fonte), 1, 9), coalesce(fonte_tce, '{$oDadosOrcTipoRec->o15_codigo}')
+								order by fonterecursos, elemento";
 
-					$oDadosDetalhe2->valorprevistoinicial = $this->formataValor(0, 14, "0");
-					$oDadosDetalhe2->valorprevatualizado  = $this->formataValor(0, 14, "0");
-					$oDadosDetalhe2->valorrealizadobim    = $this->formataValor(0, 14, "0");
-					$oDadosDetalhe2->valorrealizadoexe    = $this->formataValor(0, 14, "0");
+				$res_receita = db_query($sql_receita,0);
+				/*if($oDadosOrcTipoRec->o15_codigo == 1000000000) {
+					die($sql_receita);
+				}*/
+				//die(pg_last_error());
+				//db_criatabela($res_receita);exit;	
+	                        
+	                        /*$sSqlReceita = "select o57_fonte, 
+	                                               o70_codigo, 
+	                                               sum(saldo_inicial) as saldo_inicial, 
+	                                               sum(saldo_inicial_prevadic) as saldo_inicial_prevadic, 
+	                                               sum(saldo_arrecadado) as saldo_arrecadado, 
+	                                               sum(saldo_arrecadado_acumulado) as saldo_arrecadado_acumulado, 
+	                                               array_to_string(array_accum(distinct o70_codrec), ',') as o70_codrec
+	                                         from ({$rsReceitaSaldo}) as dados
+	                                        group by o57_fonte,o70_codrec
+	                                        order by o57_fonte,o70_codrec";
+	                        $rsReceitaSaldo = db_query($sSqlReceita);*/
+				$iLinhasOrcReceita = pg_num_rows($res_receita);
+				for($iInd = 0; $iInd < $iLinhasOrcReceita; $iInd ++) {
 
-				} else {
-
-					$oDadosDetalhe2->valorprevistoinicial = $this->formataValor( abs($oDadosOrcReceita->saldo_inicial)             , 14, "0");
-					$oDadosDetalhe2->valorprevatualizado  = $this->formataValor( abs($oDadosOrcReceita->saldo_inicial_prevadic)    , 14, "0");
-					$oDadosDetalhe2->valorrealizadobim    = $this->formataValor( abs($oDadosOrcReceita->saldo_arrecadado)          , 14, "0");
-					$oDadosDetalhe2->valorrealizadoexe    = $this->formataValor( abs($oDadosOrcReceita->saldo_arrecadado_acumulado), 14, "0");
+					$oDadosOrcReceita = db_utils::fieldsMemory ( $res_receita, $iInd );
+					/*
+					 * Somente irá constar as receitas analiticas e que possuirem vinculo na orcreceita
+					 */
+					if ($oDadosOrcReceita->elemento == "0" || $oDadosOrcReceita->elemento == "" || $oDadosOrcReceita->fonterecursos == "0" || $oDadosOrcReceita->fonterecursos == "") {
+						continue;
+					}
 					
-				}
+					// Se o Código da Receita não começar com "9" o caractere 11, ou seja, o nono caractere será em branco
+					if (substr ( $oDadosOrcReceita->elemento, 0, 1 ) != "9") {
+						$iCodigoReceita = substr ( $oDadosOrcReceita->elemento, 1, 8 );
+					} else {
+						$iCodigoReceita = substr ( $oDadosOrcReceita->elemento, 0, 8 );
+					}
 
-				$oDadosDetalhe2->brancos2             = " ";
-				$oDadosDetalhe2->fonterecursos        = str_pad(substr($oDadosOrcReceita->o70_codigo, 0, 10)              , 10 , "0", STR_PAD_LEFT);
-				$oDadosDetalhe2->brancos3             = str_repeat(" ", 330);
-				$oDadosDetalhe2->NumRegistroLido      = str_pad($iNumLinha, 10, "0", STR_PAD_LEFT);
-				$oDadosDetalhe2->codigolinha          = 2000009;
-				
-				$this->aDados [] = $oDadosDetalhe2;
-				
-				if ($lDebug) {
+					if (in_array($oDadosOrcReceita->elemento.$oDadosOrcReceita->saldo_inicial
+								.$oDadosOrcReceita->saldo_inicial_prevadic
+								.$oDadosOrcReceita->saldo_arrecadado
+								.$oDadosOrcReceita->saldo_arrecadado_acumulado, $aReceitasIncluidas)) {
+						continue;
+					}
+					$aReceitasIncluidas[] = $oDadosOrcReceita->elemento
+										   .$oDadosOrcReceita->saldo_inicial
+										   .$oDadosOrcReceita->saldo_inicial_prevadic
+										   .$oDadosOrcReceita->saldo_arrecadado
+										   .$oDadosOrcReceita->saldo_arrecadado_acumulado;
+
+					$iNumLinha++;
+					$oDadosDetalhe2 = new stdClass ();
+					$oDadosDetalhe2->tipregistro          = "2";
+					$oDadosDetalhe2->brancos1             = " ";
+					$oDadosDetalhe2->codigoreceita        = str_pad($iCodigoReceita, 10, "0", STR_PAD_RIGHT);
 					
-					$sLinhaReceita = $oDadosDetalhe2->tipregistro
-					                 . " | " . $oDadosDetalhe2->brancos1
-					                 . " | " . $oDadosDetalhe2->codigoreceita 
-					                 . " | " . $oDadosDetalhe2->valorprevistoinicial 
-					                 . " | " . $oDadosDetalhe2->valorprevatualizado 
-					                 . " | " . $oDadosDetalhe2->valorrealizadobim 
-					                 . " | " . $oDadosDetalhe2->valorrealizadoexe 
-					                 . " | " . $oDadosDetalhe2->brancos2
-					                 . " | " . $oDadosDetalhe2->fonterecursos
-					                 . " | " . $oDadosDetalhe2->brancos3
-									 . " | " . $oDadosDetalhe2->NumRegistroLido;
-					fputs ( $arqReceita, $sLinhaReceita . "\r\n" );
-					fputs ( $arqFinal, str_replace(" | ", "", $sLinhaReceita) . "\r\n" );
+					if($this->codigoOrgaoTCE != "P088") {
+
+						$oDadosDetalhe2->valorprevistoinicial = $this->formataValor(0, 14, "0");
+						$oDadosDetalhe2->valorprevatualizado  = $this->formataValor(0, 14, "0");
+						$oDadosDetalhe2->valorrealizadobim    = $this->formataValor(0, 14, "0");
+						$oDadosDetalhe2->valorrealizadoexe    = $this->formataValor(0, 14, "0");
+
+					} else {
+
+						$oDadosDetalhe2->valorprevistoinicial = $this->formataValor( abs($oDadosOrcReceita->saldo_inicial)             , 14, "0");
+						$oDadosDetalhe2->valorprevatualizado  = $this->formataValor( abs($oDadosOrcReceita->saldo_inicial_prevadic)    , 14, "0");
+						$oDadosDetalhe2->valorrealizadobim    = $this->formataValor( abs($oDadosOrcReceita->saldo_arrecadado)          , 14, "0");
+						$oDadosDetalhe2->valorrealizadoexe    = $this->formataValor( abs($oDadosOrcReceita->saldo_arrecadado_acumulado), 14, "0");
+						
+					}
+
+					$oDadosDetalhe2->tipocadastro         = "0";
+					$oDadosDetalhe2->fonterecursos        = str_pad(substr($oDadosOrcReceita->fonterecursos, 0, 10), 10 , "0", STR_PAD_LEFT);
+					$oDadosDetalhe2->brancos2             = str_repeat(" ", 330);
+					$oDadosDetalhe2->NumRegistroLido      = str_pad($iNumLinha, 10, "0", STR_PAD_LEFT);
+					$oDadosDetalhe2->codigolinha          = 2000009;
 					
+					$this->aDados [] = $oDadosDetalhe2;
+					
+					if ($lDebug) {
+						
+						$sLinhaReceita = $oDadosDetalhe2->tipregistro
+						                 . " | " . $oDadosDetalhe2->brancos1
+						                 . " | " . $oDadosDetalhe2->codigoreceita 
+						                 . " | " . $oDadosDetalhe2->valorprevistoinicial 
+						                 . " | " . $oDadosDetalhe2->valorprevatualizado 
+						                 . " | " . $oDadosDetalhe2->valorrealizadobim 
+						                 . " | " . $oDadosDetalhe2->valorrealizadoexe 
+						                 . " | " . $oDadosDetalhe2->tipocadastro
+						                 . " | " . $oDadosDetalhe2->fonterecursos
+						                 . " | " . $oDadosDetalhe2->brancos2
+										 . " | " . $oDadosDetalhe2->NumRegistroLido;
+						fputs ( $arqReceita, $sLinhaReceita . "\r\n" );
+						fputs ( $arqFinal, str_replace(" | ", "", $sLinhaReceita) . "\r\n" );
+						
+					}
 				}
 			}
 		}
